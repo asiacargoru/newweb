@@ -1,0 +1,250 @@
+Полностью переделай компонент Reviews в стиле Яндекс.Карт. 
+
+ВАЖНО: НЕ используй наши стили (градиенты, brand-blue и т.д.). Используй ТОЛЬКО стиль Яндекс.Карт!
+
+РЕФЕРЕНС:
+[прикрепляю скриншот с Яндекс.Картами]
+
+ТОЧНЫЕ ТРЕБОВАНИЯ:
+
+1. ШРИФТЫ (как у Яндекса):
+   - Основной шрифт: 'YS Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif
+   - Имя автора: 14px, font-weight 500, цвет #000000
+   - Текст отзыва: 14px, font-weight 400, цвет #000000, НЕ курсив
+   - Дата: 13px, цвет #999999
+
+2. ЗВЕЗДЫ (как у Яндекса):
+   - Цвет: #FC0 (желтый Яндекса), НЕ градиент
+   - Размер: 16px
+   - Простые SVG звезды без теней
+
+3. КАРТОЧКИ ОТЗЫВОВ:
+   - Фон: белый (#FFFFFF)
+   - Border: 1px solid #E6E6E6
+   - Border-radius: 8px
+   - Padding: 16px
+   - Тень: НЕТ (или минимальная: 0 1px 2px rgba(0,0,0,0.05))
+   - Hover: убрать трансформации и сильные тени
+
+4. АВАТАРЫ:
+   - Фон: темно-синий (#1E3A8A или похожий на Яндекс)
+   - Размер: 48px × 48px
+   - Инициалы: белые, 16px, font-weight 500
+   - НЕТ градиента
+
+5. ШАПКА С РЕЙТИНГОМ:
+   - Фон: белый
+   - Border: 1px solid #E6E6E6
+   - Рейтинг: 48px, font-weight 700, цвет #000000
+   - "Яндекс Карты" - цвет текста #999999
+   - Иконка Яндекса: красный квадрат с белой "Я"
+
+6. КНОПКИ:
+   - "Поставьте нам оценку": border #D4D4D4, цвет текста #000000, hover: bg #F5F5F5
+   - "Оставить отзыв": bg #0094FF (синий Яндекса), белый текст, hover: #007ACC
+
+7. СТРУКТУРА КАРТОЧКИ:
+   - Аватар слева + имя + дата справа от аватара
+   - Под ними: звезды
+   - Под звездами: текст отзыва (БЕЗ кавычек, БЕЗ курсива)
+   - НЕТ полосы слева
+   - НЕТ поля "company"
+
+8. ОБЩАЯ СЕКЦИЯ:
+   - Фон: #F7F7F7 (светло-серый Яндекса) вместо bg-secondary/30
+   - Padding: py-16 (меньше чем сейчас)
+
+9. ССЫЛКА ВНИЗУ:
+   - Текст: "Больше отзывов на Яндекс.Картах"
+   - Цвет: #0094FF
+   - Hover: underline
+
+ПОЛНЫЙ КОД КОМПОНЕНТА:
+
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+
+type Review = {
+  author: string;
+  text: string;
+  rating: number;
+  date?: string;
+};
+
+const staticFallback: Review[] = [
+  {
+    author: "Ирина Петрова",
+    text: "Работаем с Азия Транс Карго уже 2 года. Регулярно возим ткани из Турции. Всегда четко, в срок, без задержек. Менеджеры на связи 24/7. Рекомендую!",
+    rating: 5,
+    date: "15 января 2024"
+  },
+  {
+    author: "Алексей Смирнов",
+    text: "Доставляли оборудование из Китая. Большой объем, сложная таможня. Ребята справились отлично, помогли со всеми документами. Груз пришел в срок.",
+    rating: 5,
+    date: "3 февраля 2024"
+  },
+  {
+    author: "Мария Козлова",
+    text: "Первый раз заказывали доставку из Кореи. Очень переживали. Азия Транс Карго все объяснили, провели за ручку. Товар пришел даже раньше срока!",
+    rating: 5,
+    date: "22 декабря 2024"
+  },
+];
+
+// Простые желтые звезды как у Яндекса
+const YandexStar = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="#FC0" xmlns="http://www.w3.org/2000/svg">
+    <path d="M8 0l2.163 5.455L16 6.073l-4.364 3.818L13 16l-5-3.182L3 16l1.364-6.109L0 6.073l5.837-.618L8 0z"/>
+  </svg>
+);
+
+function getInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+export default async function Reviews() {
+  let items: Review[] = [];
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/api/reviews`, { next: { revalidate: 3600 } });
+    if (res.ok) {
+      const data = await res.json();
+      items = Array.isArray(data) ? data : (Array.isArray(data?.reviews) ? data.reviews : []);
+    }
+  } catch {}
+
+  if (!items || items.length === 0) {
+    items = staticFallback;
+  }
+
+  items = items
+    .slice()
+    .sort((a, b) => {
+      const da = Date.parse(a.date || '');
+      const db = Date.parse(b.date || '');
+      if (!isNaN(da) && !isNaN(db)) return db - da;
+      return 0;
+    })
+    .slice(0, 6);
+
+  const avgRating = items.length
+    ? Math.round((items.reduce((sum, r) => sum + (r.rating || 5), 0) / items.length) * 10) / 10
+    : 4.8;
+  const reviewsCount = items.length || 19;
+  const gradesCount = items.length ? Math.max(items.length, 38) : 38;
+
+  function truncate(text: string, limit = 200) {
+    if (!text) return '';
+    const t = text.trim();
+    if (t.length <= limit) return t;
+    return t.slice(0, limit).trim() + "... еще";
+  }
+
+  return (
+    <section className="py-16" style={{ backgroundColor: '#F7F7F7', fontFamily: "'YS Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>
+      <div className="container mx-auto px-4">
+        <h2 className="text-3xl md:text-4xl font-bold text-center mb-12" style={{ color: '#000000' }}>
+          Отзывы наших клиентов
+        </h2>
+
+        {/* ШАПКА В СТИЛЕ ЯНДЕКС.КАРТ */}
+        <div className="flex justify-center mb-8">
+          <div className="bg-white rounded-lg p-6 w-full max-w-[600px]" style={{ border: '1px solid #E6E6E6' }}>
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="flex items-center gap-2" style={{ fontSize: '14px', color: '#999999' }}>
+                <span style={{ fontWeight: 500, color: '#000000' }}>Азия Транс Карго</span>
+                <span className="mx-1">•</span>
+                <span className="flex items-center gap-1">
+                  <span className="inline-flex items-center justify-center font-bold" style={{ width: '16px', height: '16px', backgroundColor: '#FC3F1D', color: '#FFFFFF', fontSize: '11px', borderRadius: '2px' }}>Я</span>
+                  <span>Яндекс Карты</span>
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div style={{ fontSize: '48px', fontWeight: 700, color: '#000000' }}>
+                  {String(avgRating).replace('.', ',')}
+                </div>
+                <div className="flex gap-1">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <YandexStar key={i} />
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ fontSize: '13px', color: '#999999' }}>
+                {reviewsCount} отзывов • {gradesCount} оценок
+              </div>
+
+              <div className="flex gap-3 mt-2">
+                <Link href="https://yandex.ru/maps/org/aziya_trans_kargo/70075743534/" target="_blank">
+                  <button style={{ padding: '10px 20px', border: '1px solid #D4D4D4', borderRadius: '8px', backgroundColor: '#FFFFFF', color: '#000000', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }} className="hover:bg-gray-50">
+                    Поставьте нам оценку
+                  </button>
+                </Link>
+                <Link href="https://yandex.ru/maps/org/aziya_trans_kargo/70075743534/" target="_blank">
+                  <button style={{ padding: '10px 20px', border: 'none', borderRadius: '8px', backgroundColor: '#0094FF', color: '#FFFFFF', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }} className="hover:opacity-90">
+                    Оставить отзыв
+                  </button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* КАРТОЧКИ В СТИЛЕ ЯНДЕКС.КАРТ */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-7xl mx-auto mb-8">
+          {items.map((review, idx) => (
+            <div
+              key={idx}
+              className="bg-white rounded-lg p-4"
+              style={{ border: '1px solid #E6E6E6' }}
+            >
+              <div className="flex items-start gap-3 mb-3">
+                <div style={{ width: '48px', height: '48px', backgroundColor: '#1E3A8A', color: '#FFFFFF', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 500, flexShrink: 0 }}>
+                  {getInitials(review.author)}
+                </div>
+                <div>
+                  <h4 style={{ fontSize: '14px', fontWeight: 500, color: '#000000', marginBottom: '4px' }}>
+                    {review.author}
+                  </h4>
+                  {review.date && (
+                    <p style={{ fontSize: '13px', color: '#999999' }}>{review.date}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-1 mb-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <YandexStar key={i} />
+                ))}
+              </div>
+
+              <p style={{ fontSize: '14px', color: '#000000', lineHeight: '1.5' }}>
+                {truncate(review.text)}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <div className="text-center">
+          <Link href="https://yandex.ru/maps/org/aziya_trans_kargo/70075743534/" target="_blank" style={{ color: '#0094FF', fontSize: '14px', textDecoration: 'none' }} className="hover:underline">
+            Больше отзывов на Яндекс.Картах
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+ВАЖНО:
+- Используй inline styles где нужны точные цвета Яндекса
+- НЕ используй gradients, brand-blue, brand-red
+- Шрифт YS Text (шрифт Яндекса)
+- Цвета: желтый #FC0, синий #0094FF, красный #FC3F1D
+- Простые, чистые карточки без излишеств

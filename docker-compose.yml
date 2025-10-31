@@ -1,0 +1,214 @@
+version: "3.8"
+
+# Все сервисы в одной сети
+networks:
+  app_net:
+    driver: bridge
+
+# Volumes для персистентности
+volumes:
+  postgres_data:
+  redis_data:
+
+services:
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: nginx
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # - ./nginx/certs:/etc/nginx/certs:ro  # при необходимости TLS сертификатов
+    restart: always
+    env_file:
+      - ./.env
+    networks:
+      - app_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: "256M"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: frontend
+    env_file:
+      - ./.env
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+    restart: always
+    networks:
+      - app_net
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          node -e "require('http').get('http://localhost:3000', r => {process.exit((r.statusCode===200||r.statusCode===404)?0:1)}).on('error', () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: "512M"
+
+  backend:
+    build:
+      context: ./backend
+    image: asia-trans-cargo-backend:latest
+    container_name: backend
+    env_file:
+      - ./.env
+    restart: always
+    networks:
+      - app_net
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python -c "import urllib.request,sys; url='http://localhost:8000/health';\ntry:\n r=urllib.request.urlopen(url,timeout=5);\n sys.exit(0 if r.status in (200,204) else 1)\nexcept Exception:\n sys.exit(1)"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: "512M"
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    env_file:
+      - ./.env
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    restart: always
+    networks:
+      - app_net
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} -h localhost || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "1.50"
+          memory: "1G"
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    env_file:
+      - ./.env
+    command: >
+      sh -c "redis-server --appendonly yes ${REDIS_PASSWORD:+--requirepass $REDIS_PASSWORD}"
+    restart: always
+    networks:
+      - app_net
+    volumes:
+      - redis_data:/data
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ${REDIS_PASSWORD:+-a $REDIS_PASSWORD} ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: "256M"
+
+  celery_worker:
+    image: asia-trans-cargo-backend:latest
+    container_name: celery_worker
+    env_file:
+      - ./.env
+    command: >
+      sh -c "celery -A app.tasks.celery_app worker --loglevel=INFO --concurrency ${CELERY_CONCURRENCY:-2}"
+    restart: always
+    networks:
+      - app_net
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python -c "import os,sys,redis; r=redis.Redis(host=os.getenv('REDIS_HOST','redis'), port=int(os.getenv('REDIS_PORT','6379')), password=os.getenv('REDIS_PASSWORD') or None); sys.exit(0 if r.ping() else 1)"
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: "512M"
+
+  celery_beat:
+    image: asia-trans-cargo-backend:latest
+    container_name: celery_beat
+    env_file:
+      - ./.env
+    command: >
+      sh -c "celery -A app.tasks.celery_app beat --loglevel=INFO"
+    restart: on-failure
+    networks:
+      - app_net
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python -c "import os,sys,redis; r=redis.Redis(host=os.getenv('REDIS_HOST','redis'), port=int(os.getenv('REDIS_PORT','6379')), password=os.getenv('REDIS_PASSWORD') or None); sys.exit(0 if r.ping() else 1)"
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: "256M"

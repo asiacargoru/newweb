@@ -1,0 +1,173 @@
+Создай frontend на Next.js 14+ (App Router):
+
+ФАЙЛ: frontend/next.config.js
+```javascript
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  output: 'standalone', // для Docker
+  
+  // Оптимизация для SEO
+  images: {
+    domains: [], // добавить если нужны внешние изображения
+    formats: ['image/avif', 'image/webp'],
+  },
+  
+  // Перенаправление API запросов на backend
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'http://backend:8000/api/:path*',
+      },
+    ]
+  },
+  
+  // Заголовки безопасности
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'RetryClaude does not have the ability to run the code it generates yet.DContinuejavascript            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=()',
+          },
+        ],
+      },
+    ]
+  },
+  
+  // Для ISR статей
+  experimental: {
+    staleTimes: {
+      dynamic: 30, // секунды
+      static: 180,
+    },
+  },
+}
+
+module.exports = nextConfig
+ФАЙЛ: frontend/app/layout.tsx
+typescript// Root Layout с:
+// - Metadata (default SEO)
+// - Google Fonts или локальные шрифты
+// - Yandex.Metrika (не Google Analytics!)
+// - ConsentBanner компонент
+// - Header и Footer
+// - Inter font
+
+export const metadata: Metadata = {
+  metadataBase: new URL('https://asiatranscargo.ru'),
+  title: {
+    default: 'Азия Транс Карго - Грузоперевозки из 20+ стран в Россию',
+    template: '%s | Азия Транс Карго',
+  },
+  description: 'Международные грузоперевозки из Азии, Европы и других регионов. Авто, ЖД, авиа доставка. Таможенное оформление.',
+  keywords: ['грузоперевозки', 'доставка из Китая', 'международная логистика'],
+  openGraph: {
+    type: 'website',
+    locale: 'ru_RU',
+    siteName: 'Азия Транс Карго',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+    },
+  },
+}
+
+// HTML lang="ru"
+// Yandex.Metrika script (только после согласия на аналитику)
+ФАЙЛ: frontend/app/page.tsx
+typescript// Главная страница (SSR):
+// Компоненты:
+// - Hero секция с USP
+// - Блок "Направления" (список стран с флагами)
+// - Блок "Услуги" (виды транспорта)
+// - Блок "Преимущества" (4-6 карточек)
+// - Блок "Последние статьи" (3 статьи из блога)
+// - Форма быстрой заявки
+// - FAQ секция
+
+// Данные с сервера:
+async function getHomeData() {
+  const countries = await fetch('http://backend:8000/api/v1/countries', {
+    next: { revalidate: 3600 } // кэш 1 час
+  })
+  const articles = await fetch('http://backend:8000/api/v1/articles?limit=3')
+  return { countries, articles }
+}
+
+// JSON-LD разметка Organization
+ФАЙЛ: frontend/app/lib/api.ts
+typescript// API клиент для запросов к backend:
+
+export const api = {
+  // Countries
+  getCountries: async () => {},
+  getCountry: async (code: string) => {},
+  
+  // Articles  
+  getArticles: async (params) => {},
+  getArticle: async (slug: string) => {},
+  
+  // Services
+  getServicesByCountry: async (countryCode: string) => {},
+  
+  // Leads
+  createLead: async (data, consentId) => {},
+  
+  // Consents
+  createConsent: async (data) => {},
+  checkConsent: async (userHash) => {},
+}
+
+// Используй fetch с error handling
+// Retry логика
+// TypeScript типы для всех запросов/ответов
+ФАЙЛ: frontend/app/lib/seo.ts
+typescript// SEO утилиты:
+
+export function generateMetadata(data: {
+  title: string
+  description: string
+  keywords?: string[]
+  ogImage?: string
+  noindex?: boolean
+}): Metadata {
+  // Генерация metadata объекта для Next.js
+}
+
+export function generateJsonLd(type: 'article' | 'service' | 'organization', data: any) {
+  // Генерация Schema.org JSON-LD
+  // Article, Service, Organization, BreadcrumbList
+}
+
+export function generateCanonicalUrl(path: string) {
+  return `https://asiatranscargo.ru${path}`
+}
+```
+
+ТРЕБОВАНИЯ:
+1. TypeScript strict mode
+2. Все данные через Server Components где возможно
+3. Client Components только для интерактивности
+4. Обработка loading и error states
+5. Suspense для async компонентов
+
+Создай эти базовые файлы Next.js.
