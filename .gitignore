@@ -19,6 +19,10 @@ venv/
 .venv/
 ENV/
 
+# Python caches (global)
+**/__pycache__/
+**/*.pyc
+
 # Node/Next artifacts in subprojects
 node_modules/
 frontend/node_modules/

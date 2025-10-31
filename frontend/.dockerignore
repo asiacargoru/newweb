@@ -1,0 +1,29 @@
+# Frontend .dockerignore
+
+# Node/Next.js
+node_modules/
+.next/
+out/
+.eslintcache
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+*.local
+
+# Editors and VCS
+.vscode/
+.idea/
+.git
+.gitignore
+.gitattributes
+
+# OS junk
+.DS_Store
+Thumbs.db
